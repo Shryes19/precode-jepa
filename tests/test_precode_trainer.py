@@ -72,4 +72,26 @@ torch.save(model.pred_head.state_dict(), f"{tmp}/pred_head.pt")
 merged = model.merge_and_unload()
 assert not hasattr(merged, "pred_head")
 assert torch.load(f"{tmp}/pred_head.pt")["weight"].shape == (D, H)
+
+# 5) InfoNCE variant: finite loss, and z_hat retrieves its own task among all cached z after training
+torch.manual_seed(1)
+model2 = get_peft_model(LlamaForCausalLM(cfg), LoraConfig(task_type=TaskType.CAUSAL_LM, r=4, lora_alpha=8,
+                        target_modules=["q_proj", "v_proj"]))
+model2.pred_head = torch.nn.Linear(H, D, bias=False)
+tr2 = PreCodeTrainer(model=model2, args=args, train_dataset=ds, data_collator=default_data_collator,
+                     lbd=1.0, cache_path=f"{tmp}/cache.pt", precode_loss="infonce", infonce_temp=0.07)
+assert tr2.Z.shape == (7, D)
+l2 = tr2.compute_loss(model2, {k: v.clone() for k, v in batch.items()})
+assert torch.isfinite(l2)
+def top1(m, trn):
+    with torch.no_grad():
+        bb = default_data_collator(rows[:7])
+        out = m(input_ids=bb["input_ids"], attention_mask=bb["attention_mask"], output_hidden_states=True)
+        idx = ((bb["labels"] != -100).int().argmax(1) - 1)
+        zh = F.normalize(m.pred_head(out.hidden_states[-1][torch.arange(7), idx].float()), dim=-1)
+        pred = (zh @ trn.Z.T).argmax(1).tolist()
+        return sum(trn.z_ids[p] == int(t) for p, t in zip(pred, bb["task_id"])) / 7
+b1 = top1(model2, tr2); tr2.train(); a1 = top1(model2, tr2)
+print(f"infonce top-1 retrieval before {b1:.2f} after {a1:.2f}")
+assert a1 >= 0.85, a1
 print("ALL PRECODE TRAINER TESTS PASSED")

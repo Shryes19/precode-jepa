@@ -10,6 +10,7 @@ embedding comes from the SFT forward pass; the target is precomputed). Inference
 
 ```
 loss = NTP + lambda * (1 - cos(W h_prompt, z_behaviour))      W: linear 2048 -> 768, z frozen
+# ablation `precodence`: InfoNCE of W h_prompt against ALL cached z (own task = positive), tau = 0.07
 ```
 
 ## Layout (one owner per folder)

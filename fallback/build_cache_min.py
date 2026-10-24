@@ -19,10 +19,10 @@ def calls(tests):
 
 def mutate(v):
     if isinstance(v, bool): return [not v]
-    if isinstance(v, int): return [0, 1, -1, -v, v + 1]
+    if isinstance(v, int): return [0, 1, -1, -v, v + 1, v * 100 + 7]
     if isinstance(v, float): return [0.0, -v]
-    if isinstance(v, str): return ["", v[:1], v[::-1], v + v]
-    if isinstance(v, list): return [[], v[:1], v[::-1], v + v[:1]]
+    if isinstance(v, str): return ["", v[:1], v[::-1], v + v, v * 5]
+    if isinstance(v, list): return [[], v[:1], v[::-1], v + v[:1], v * 3]
     if isinstance(v, tuple): return [(), v[:1], tuple(reversed(v))]
     return []
 
@@ -46,20 +46,25 @@ def probes(cs, cap=20):
     return res[:cap]
 
 RUNNER = r'''
-import json, sys
+import json, signal, sys
+def _alarm(*_): raise TimeoutError
+signal.signal(signal.SIGALRM, _alarm)
 {setup}
 {code}
 _res = []
 for _e in json.loads(sys.stdin.read()):
+    signal.alarm(1)                      # per-probe limit: one slow probe can't kill the whole task
     try:
         _r = repr(eval(_e))
-    except Exception as _x:
-        _r = type(_x).__name__
+    except BaseException as _x:
+        _r = "Timeout" if isinstance(_x, TimeoutError) else type(_x).__name__
+    finally:
+        signal.alarm(0)
     _res.append([_e, _r[:200]])
 print("@@" + json.dumps(_res))
 '''
 
-def run(code, setup, pr, timeout=10):
+def run(code, setup, pr, timeout=30):
     try:
         p = subprocess.run([sys.executable, "-c", RUNNER.format(setup=setup or "", code=code)],
                            input=json.dumps(pr), capture_output=True, text=True, timeout=timeout,

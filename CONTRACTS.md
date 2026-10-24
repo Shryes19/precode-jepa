@@ -6,7 +6,7 @@
 | C2 | `cache/behaviour_cache.pt` | Shryes -> Gagan | `torch.save({int task_id: float32 tensor (768,)})`, L2-normalised |
 | C3 | `cache/traces.jsonl` | Shryes | `{"task_id": int, "trace": ["f([5, 5, 4]) -> 4", ...]}` |
 | C4 | `/data/precode/models/<run>/` | Gagan -> Nikhita, Shryes | merged HF model + tokenizer; PreCode runs add `pred_head.pt`; `DONE` written last |
-| C5 | run name | all | `{sft,jepa,precode,precodecond}_s{42,7,1234}`; zero-shot = `base_s0` |
+| C5 | run name | all | `{sft,jepa,precode,precodence,precodecond}_s{42,7,1234}` (precodence = PreCode with InfoNCE over all cached z); zero-shot = `base_s0` |
 | C6 | `eval/generate.py` | Nikhita | `--model DIR --dataset {mbpp,humaneval} --out FILE [--n 1] [--temperature 0.0] [--prompts FILE]` |
 | C7 | samples file | generate -> score | EvalPlus jsonl `{"task_id": "Mbpp/11", "solution": "..."}`, all 378 MBPP+ tasks |
 | C8 | `eval/mbppplus_test_ids.json` | Nikhita | list of 224 `"Mbpp/<id>"`, 11 <= id <= 510 |

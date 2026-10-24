@@ -764,11 +764,17 @@ class PreCodeTrainer(Trainer):
     behaviour on probe inputs (cache/behaviour_cache.pt).
     """
 
-    def __init__(self, *args, lbd=1.0, cache_path=None, **kwargs):
+    def __init__(self, *args, lbd=1.0, cache_path=None, precode_loss="cosine", infonce_temp=0.07, **kwargs):
         super().__init__(*args, **kwargs)
         self.lbd = lbd
+        self.precode_loss = precode_loss
+        self.infonce_temp = infonce_temp
         cache = torch.load(cache_path)
         self.z = {int(k): F.normalize(v.float(), dim=0) for k, v in cache.items()}
+        # InfoNCE negatives = ALL cached tasks (not just the batch): batch size 4 would give only 3 negatives.
+        self.z_ids = sorted(self.z)
+        self.z_pos = {t: i for i, t in enumerate(self.z_ids)}
+        self.Z = torch.stack([self.z[t] for t in self.z_ids])  # [N_tasks, dim]
         self._missing_logged = False
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
@@ -786,7 +792,13 @@ class PreCodeTrainer(Trainer):
         if keep:
             z = torch.stack([self.z[int(task_ids[i])] for i in keep]).to(z_hat.device)
             cos = F.cosine_similarity(z_hat[keep], z, dim=-1)
-            jepa = 1.0 - cos.mean()
+            if self.precode_loss == "infonce":
+                Z = self.Z.to(z_hat.device)
+                logits = F.normalize(z_hat[keep], dim=-1) @ Z.T / self.infonce_temp      # [B, N_tasks]
+                target = torch.tensor([self.z_pos[int(task_ids[i])] for i in keep], device=z_hat.device)
+                jepa = F.cross_entropy(logits, target)
+            else:
+                jepa = 1.0 - cos.mean()
         else:
             cos = torch.zeros(1, device=ntp.device)
             jepa = torch.zeros((), device=ntp.device)
@@ -866,6 +878,9 @@ def main():
     parser.add_argument("--precode", action="store_true", help="PreCode-JEPA: predict cached execution-behaviour embedding.")
     parser.add_argument("--behaviour_cache", type=str, default=None, help="Path to {task_id: tensor(dim)} cache.")
     parser.add_argument("--behaviour_dim", type=int, default=768, help="Dimension of behaviour embedding.")
+    parser.add_argument("--precode_loss", type=str, default="cosine", choices=["cosine", "infonce"],
+                        help="PreCode JEPA term: 1-cos to own z, or InfoNCE against all cached z.")
+    parser.add_argument("--infonce_temp", type=float, default=0.07, help="InfoNCE temperature (PreCode).")
     parser.add_argument("--unmask_assistant_special_tokens", action="store_true", help="When set, unmask assistant special tokens.")
 
     args = parser.parse_args()
@@ -1081,6 +1096,8 @@ def main():
             callbacks=[flop_callback] if args.track_flop else [],
             lbd=args.lbd,
             cache_path=args.behaviour_cache,
+            precode_loss=args.precode_loss,
+            infonce_temp=args.infonce_temp,
         )
     elif args.regular:
         if torch.cuda.current_device() == 0:

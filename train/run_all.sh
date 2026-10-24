@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Train one (method, seed). Run on the 4090 workstation, env `train`, from repo root, inside tmux.
-#   bash train/run_all.sh <sft|jepa|precode> <seed>          e.g.  bash train/run_all.sh precode 42
+# Train one (method, seed). Methods: sft | jepa | precode | precodence (PreCode with InfoNCE over all cached z). Run on the 4090 workstation, env `train`, from repo root, inside tmux.
+#   bash train/run_all.sh <sft|jepa|precode|precodence> <seed>          e.g.  bash train/run_all.sh precode 42
 #   LBD=0.5 bash train/run_all.sh precode 7                   (override lambda)
 #   CACHE=fallback/behaviour_cache.pt bash train/run_all.sh precode 42
 set -euo pipefail
@@ -13,5 +13,7 @@ case $M in
   sft)     python train/finetune.py $BASE --regular ;;
   jepa)    python train/finetune.py $BASE --additive_mask --predictors 1 --lbd 1.0 ;;
   precode) python train/finetune.py $BASE --regular --precode --behaviour_cache ${CACHE:-cache/behaviour_cache.pt} --lbd ${LBD:-1.0} ;;
+  precodence) python train/finetune.py $BASE --regular --precode --precode_loss infonce --infonce_temp ${TEMP:-0.07} \
+              --behaviour_cache ${CACHE:-cache/behaviour_cache.pt} --lbd ${LBD:-1.0} ;;
   *) echo "unknown method $M"; exit 1 ;;
 esac 2>&1 | tee /data/precode/models/${RUN}.log
