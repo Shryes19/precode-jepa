@@ -218,3 +218,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- PreCode-JEPA ---
+*.safetensors
+*.bin
+checkpoint-*/
+wandb/
+/data/
